@@ -10,6 +10,7 @@ about = "Find duplicates files in a directory"
 [dependencies]
 clap = { version = "4.4.8", features = ["derive"] }
 dashmap = { version = "5.5.3", features = ["rayon"] }
+indicatif = "0.17.7"
 rayon = "1.8.0"
 sha2 = "0.10.8"
 threadpool = "1.8.1"

@@ -9,6 +9,7 @@ use std::time::SystemTime;
 
 use clap::Parser;
 use dashmap::DashMap;
+use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use threadpool::ThreadPool;
@@ -112,6 +113,16 @@ fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileData> 
     let pool = ThreadPool::new(4); // Number of threads
     let (tx, rx) = channel();
 
+    let progress_bar = ProgressBar::new(paths.len() as u64);
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+            )
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+
     for path in paths {
         let tx = tx.clone();
         pool.execute(move || {
@@ -123,35 +134,32 @@ fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileData> 
 
     drop(tx); // Close the sending half
 
-    let mut results = DashMap::new();
+    let results = DashMap::new();
     for fdata in rx {
         let file_data = fdata;
         // println!("{} -> {:#?}", file_data.path.display(), file_data);
         let path = file_data.path.to_owned();
         results.insert(path, file_data);
+        progress_bar.inc(1); // Update progress
     }
 
     results
 }
 
-fn find_duplicates(results: &DashMap<PathBuf, FileData>) -> DashMap<String, Vec<FileData>> {
-    let mut hash_groups: DashMap<String, Vec<FileData>> = DashMap::new();
-
-    for file_data in results.iter() {
-        let cpy = file_data.clone();
-        hash_groups
-            .entry(file_data.hash.clone())
-            .or_insert_with(Vec::new)
-            .push(cpy);
-    }
-
-    hash_groups
-}
-
 fn find_duplicates_parallel(
     results: &DashMap<PathBuf, FileData>,
 ) -> DashMap<String, Vec<FileData>> {
-    let mut hash_groups = DashMap::new();
+    let hash_groups = DashMap::new();
+
+    let progress_bar = ProgressBar::new(results.len() as u64);
+    progress_bar.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+            )
+            .unwrap()
+            .progress_chars("#>-"),
+    );
 
     results.par_iter().for_each(|entry| {
         let file_data = entry.value();
@@ -159,6 +167,8 @@ fn find_duplicates_parallel(
             .entry(file_data.hash.clone())
             .or_insert_with(|| Vec::new())
             .push(file_data.clone());
+
+        progress_bar.inc(1); // Update progress
     });
 
     hash_groups
@@ -169,16 +179,21 @@ fn main() {
 
     let args = Args::parse();
     let directory_path = args.scan;
+    let dir = directory_path.to_owned();
     let result_file = args.output;
 
     println!("Scanning directory: {}", directory_path);
     println!("Output will be saved to: {}", result_file);
 
-    let dirs = scan_directories(&directory_path);
+    let abs_path = to_absolute_path(&PathBuf::from(directory_path));
+    println!("Scanning directory <{}>...", abs_path.unwrap().display());
+    let dirs = scan_directories(&dir);
+    println!("Computing hashes...");
     let computed_files = process_files_in_parallel(dirs);
     //for (path, fdata) in computed_files {
     //    println!("{} -> {:#?}", path.display(), fdata);
     //}
+    println!("Looking for duplicates...");
     let _duplicates = find_duplicates_parallel(&computed_files);
     // TODO
     // output nice file with the duplicates informations, sorting etc.
