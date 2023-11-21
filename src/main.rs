@@ -1,17 +1,23 @@
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use std::fs::File;
+use std::io::Write;
 use std::io::{self, Read};
 use std::os::unix::fs::MetadataExt;
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 use std::sync::mpsc::channel;
 use std::time::SystemTime;
 
 use clap::Parser;
 use dashmap::DashMap;
+use hex;
 use indicatif::{ProgressBar, ProgressStyle};
+use num_cpus;
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
+use ring::digest::{Context, SHA256};
+use serde::Serialize;
+use serde_json;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
@@ -28,7 +34,7 @@ struct Args {
     output: String,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 enum FileCategory {
     File,
     Directory,
@@ -36,7 +42,7 @@ enum FileCategory {
     Other,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 struct FileData {
     path: PathBuf,
     hash: String,
@@ -64,9 +70,25 @@ fn get_file_category(metadata: &fs::Metadata) -> FileCategory {
     FileCategory::Other
 }
 
+fn normalize_path(path: &PathBuf) -> PathBuf {
+    let mut normalized_path = PathBuf::new();
+
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                normalized_path.pop();
+            }
+            Component::CurDir => {} // Do nothing for current directory components
+            _ => normalized_path.push(component.as_os_str()),
+        }
+    }
+
+    normalized_path
+}
+
 fn to_absolute_path(relative_path: &PathBuf) -> std::io::Result<PathBuf> {
     let current_dir = env::current_dir()?;
-    Ok(current_dir.join(relative_path))
+    Ok(normalize_path(&current_dir.join(relative_path)))
 }
 
 fn get_file_info(path: &PathBuf, hash: &str) -> std::io::Result<FileData> {
@@ -85,19 +107,20 @@ fn get_file_info(path: &PathBuf, hash: &str) -> std::io::Result<FileData> {
 }
 
 fn calculate_hash(file_path: &PathBuf) -> io::Result<String> {
-    let mut file = fs::File::open(file_path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0; 1024]; // Read in chunks of 1024 bytes
+    let mut file = File::open(file_path)?;
+    let mut context = Context::new(&SHA256);
+    let mut buffer = [0; 1024]; // Adjust the buffer size if needed
 
     loop {
         let count = file.read(&mut buffer)?;
         if count == 0 {
             break;
         }
-        hasher.update(&buffer[..count]);
+        context.update(&buffer[..count]);
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    let digest = context.finish();
+    Ok(hex::encode(digest.as_ref()))
 }
 
 fn scan_directories(start_path: &str) -> Vec<PathBuf> {
@@ -110,7 +133,8 @@ fn scan_directories(start_path: &str) -> Vec<PathBuf> {
 }
 
 fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileData> {
-    let pool = ThreadPool::new(4); // Number of threads
+    let num_cores = num_cpus::get();
+    let pool = ThreadPool::new(num_cores); // Number of threads
     let (tx, rx) = channel();
 
     let progress_bar = ProgressBar::new(paths.len() as u64);
@@ -174,6 +198,20 @@ fn find_duplicates_parallel(
     hash_groups
 }
 
+fn write_results_to_json(
+    duplicates: DashMap<String, Vec<FileData>>,
+    output_file: &str,
+) -> std::io::Result<()> {
+    // Convert DashMap to a standard HashMap for serialization
+    let duplicates_hashmap: HashMap<_, _> = duplicates.into_iter().collect();
+
+    let json = serde_json::to_string_pretty(&duplicates_hashmap)?;
+    let mut file = File::create(output_file)?;
+    file.write_all(json.as_bytes())?;
+
+    Ok(())
+}
+
 fn main() {
     println!("Starting duplicate file finder...");
 
@@ -194,7 +232,9 @@ fn main() {
     //    println!("{} -> {:#?}", path.display(), fdata);
     //}
     println!("Looking for duplicates...");
-    let _duplicates = find_duplicates_parallel(&computed_files);
-    // TODO
-    // output nice file with the duplicates informations, sorting etc.
+    let duplicates = find_duplicates_parallel(&computed_files);
+    match write_results_to_json(duplicates, &result_file) {
+        Ok(_) => println!("Results written to {}", result_file),
+        Err(e) => eprintln!("Failed to write results: {}", e),
+    }
 }

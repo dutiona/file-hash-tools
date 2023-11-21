@@ -10,8 +10,21 @@ about = "Find duplicates files in a directory"
 [dependencies]
 clap = { version = "4.4.8", features = ["derive"] }
 dashmap = { version = "5.5.3", features = ["rayon"] }
+hex = "0.4.3"
 indicatif = "0.17.7"
+num_cpus = "1.16.0"
+openssl = "0.10.59"
 rayon = "1.8.0"
+ring = "0.17.5"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
 sha2 = "0.10.8"
 threadpool = "1.8.1"
 walkdir = "2.4.0"
+
+[dev-dependencies]
+criterion = "0.5.1"
+
+[[bench]]
+name = "hash_benchmarks"
+harness = false
