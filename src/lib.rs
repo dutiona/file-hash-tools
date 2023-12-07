@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::Write;
-use std::io::{self, Read};
+use std::io::{self, Error, ErrorKind, Read, Write};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Component, PathBuf};
 use std::sync::mpsc::channel;
@@ -13,10 +12,12 @@ use dashmap::DashMap;
 use hex;
 use indicatif::{ProgressBar, ProgressStyle};
 use num_cpus;
+use openssl::hash::MessageDigest;
 use rayon::prelude::*;
-use ring::digest::{Context, SHA256};
+use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY, SHA256, SHA384, SHA512, SHA512_256};
 use serde::Serialize;
 use serde_json;
+use sha2::{Digest, Sha224, Sha512_224};
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
@@ -39,6 +40,117 @@ pub struct FileData {
     file_type: FileCategory,
     size: u64,
 }
+
+pub mod hash_tools {
+    use sha2::Sha512_256;
+
+    use super::*;
+
+    #[derive(PartialEq, Eq)]
+    enum SupportedHashes {
+        CRC32,      // crc32fast
+        MD5,        // openssl
+        SHA1,       // ring
+        SHA224,     // sha2
+        SHA256,     // ring
+        SHA384,     // ring
+        SHA512,     // ring
+        SHA512_224, // sha2
+        SHA512_256, // ring
+    }
+
+    fn compute_crc32_hash(file_path: &PathBuf) -> io::Result<String> {
+        let mut file = File::open(file_path)?;
+        let mut hasher = crc32fast::Hasher::new();
+        let mut buffer = [0; 1024]; // Adjust the buffer size if needed
+
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            hasher.update(&mut buffer);
+        }
+
+        let digest = hasher.finalize().to_ne_bytes();
+        Ok(hex::encode(digest))
+    }
+
+    fn compute_md5_hash(file_path: &PathBuf) -> io::Result<String> {
+        let mut file = File::open(file_path)?;
+        let mut hasher = openssl::hash::Hasher::new(MessageDigest::md5()).unwrap();
+        let mut buffer = [0; 1024]; // Adjust the buffer size if needed
+
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            let _ = hasher.update(&mut buffer);
+        }
+
+        let digest = hasher.finish().unwrap().to_vec();
+        Ok(hex::encode(digest))
+    }
+
+    fn compute_sha_ring_hash(
+        file_path: &PathBuf,
+        hash_type: &'static ring::digest::Algorithm,
+    ) -> io::Result<String> {
+        let mut file = File::open(file_path)?;
+        let mut hasher = Context::new(&hash_type);
+        let mut buffer = [0; 1024]; // Adjust the buffer size if needed
+
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            hasher.update(&buffer[..count]);
+        }
+
+        let digest = hasher.finish();
+        Ok(hex::encode(digest.as_ref()))
+    }
+
+    fn compute_sha_sha2_hash(
+        file_path: &PathBuf,
+        hash_type: SupportedHashes,
+    ) -> io::Result<String> {
+        let mut file = File::open(file_path)?;
+        let mut buffer = [0; 1024]; // Adjust the buffer size if needed
+
+        if hash_type == SupportedHashes::SHA224 {
+            let mut hasher = Sha224::new();
+            loop {
+                let count = file.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..count]);
+            }
+
+            let digest = hasher.finalize();
+            return Ok(hex::encode(digest));
+        } else if hash_type == SupportedHashes::SHA512_224 {
+            let mut hasher = Sha512_224::new();
+            loop {
+                let count = file.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..count]);
+            }
+
+            let digest = hasher.finalize();
+            return Ok(hex::encode(digest));
+        } else {
+            return Err(Error::new(ErrorKind::Unsupported, "Unsupported hash type."));
+        }
+    }
+}
+
+//fn calculate_hash(file_path: &PathBuf) -> io::Result<String> {}
 
 fn get_file_category(metadata: &fs::Metadata) -> FileCategory {
     if metadata.is_dir() {
@@ -92,23 +204,6 @@ fn get_file_info(path: &PathBuf, hash: &str) -> std::io::Result<FileData> {
     })
 }
 
-fn calculate_hash(file_path: &PathBuf) -> io::Result<String> {
-    let mut file = File::open(file_path)?;
-    let mut context = Context::new(&SHA256);
-    let mut buffer = [0; 1024]; // Adjust the buffer size if needed
-
-    loop {
-        let count = file.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        context.update(&buffer[..count]);
-    }
-
-    let digest = context.finish();
-    Ok(hex::encode(digest.as_ref()))
-}
-
 pub fn scan_directories(start_path: &str) -> Vec<PathBuf> {
     WalkDir::new(start_path)
         .into_iter()
@@ -136,7 +231,7 @@ pub fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileDa
     for path in paths {
         let tx = tx.clone();
         pool.execute(move || {
-            let hash = calculate_hash(&path).unwrap();
+            let hash = ""; //calculate_hash(&path).unwrap();
             let file_data = get_file_info(&path, &hash).unwrap();
             tx.send(file_data).unwrap();
         });
