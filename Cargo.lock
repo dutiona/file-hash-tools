@@ -340,7 +340,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "find-duplicate"
+name = "file-hash-tools"
 version = "0.1.0"
 dependencies = [
  "clap",

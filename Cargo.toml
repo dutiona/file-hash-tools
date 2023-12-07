@@ -1,9 +1,17 @@
 [package]
-name = "find-duplicate"
+name = "file-hash-tools"
 version = "0.1.0"
 edition = "2021"
 author = "Michaël Roynard <michaelroynard@gmail.com>"
 about = "Find duplicates files in a directory"
+
+[[bin]]
+name = "find-duplicate"
+path = "src/bin/find_duplicate.rs"
+
+[[bin]]
+name = "hash-computer"
+path = "src/bin/hash_computer.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

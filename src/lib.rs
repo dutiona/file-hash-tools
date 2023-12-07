@@ -9,7 +9,6 @@ use std::path::{Component, PathBuf};
 use std::sync::mpsc::channel;
 use std::time::SystemTime;
 
-use clap::Parser;
 use dashmap::DashMap;
 use hex;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -21,21 +20,8 @@ use serde_json;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
-/// Duplicate File Finder
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Directory to scan
-    #[arg(short, long)]
-    scan: String,
-
-    /// Output file for results
-    #[arg(short, long, default_value_t = String::from("."))]
-    output: String,
-}
-
 #[derive(Debug, Clone, Copy, Serialize)]
-enum FileCategory {
+pub enum FileCategory {
     File,
     Directory,
     Symlink,
@@ -43,7 +29,7 @@ enum FileCategory {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct FileData {
+pub struct FileData {
     path: PathBuf,
     hash: String,
     access_time: Option<SystemTime>,
@@ -86,7 +72,7 @@ fn normalize_path(path: &PathBuf) -> PathBuf {
     normalized_path
 }
 
-fn to_absolute_path(relative_path: &PathBuf) -> std::io::Result<PathBuf> {
+pub fn to_absolute_path(relative_path: &PathBuf) -> std::io::Result<PathBuf> {
     let current_dir = env::current_dir()?;
     Ok(normalize_path(&current_dir.join(relative_path)))
 }
@@ -123,7 +109,7 @@ fn calculate_hash(file_path: &PathBuf) -> io::Result<String> {
     Ok(hex::encode(digest.as_ref()))
 }
 
-fn scan_directories(start_path: &str) -> Vec<PathBuf> {
+pub fn scan_directories(start_path: &str) -> Vec<PathBuf> {
     WalkDir::new(start_path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -132,7 +118,7 @@ fn scan_directories(start_path: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileData> {
+pub fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileData> {
     let num_cores = num_cpus::get();
     let pool = ThreadPool::new(num_cores); // Number of threads
     let (tx, rx) = channel();
@@ -170,12 +156,12 @@ fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileData> 
     results
 }
 
-fn find_duplicates_parallel(
+pub fn find_duplicates_parallel(
     results: &DashMap<PathBuf, FileData>,
 ) -> DashMap<String, Vec<FileData>> {
     let hash_groups = DashMap::new();
 
-    let progress_bar = ProgressBar::new(results.len() as u64);
+    let progress_bar = ProgressBar::new((results.len() * 2) as u64);
     progress_bar.set_style(
         ProgressStyle::default_bar()
             .template(
@@ -195,10 +181,20 @@ fn find_duplicates_parallel(
         progress_bar.inc(1); // Update progress
     });
 
-    hash_groups
+    let filtered_hash_groups = DashMap::new();
+
+    hash_groups.par_iter().for_each(|entry| {
+        if entry.value().len() > 1 {
+            filtered_hash_groups.insert(entry.key().clone(), entry.value().clone());
+        }
+
+        progress_bar.inc(1); // Update progress
+    });
+
+    filtered_hash_groups
 }
 
-fn write_results_to_json(
+pub fn write_results_to_json(
     duplicates: DashMap<String, Vec<FileData>>,
     output_file: &str,
 ) -> std::io::Result<()> {
@@ -210,31 +206,4 @@ fn write_results_to_json(
     file.write_all(json.as_bytes())?;
 
     Ok(())
-}
-
-fn main() {
-    println!("Starting duplicate file finder...");
-
-    let args = Args::parse();
-    let directory_path = args.scan;
-    let dir = directory_path.to_owned();
-    let result_file = args.output;
-
-    println!("Scanning directory: {}", directory_path);
-    println!("Output will be saved to: {}", result_file);
-
-    let abs_path = to_absolute_path(&PathBuf::from(directory_path));
-    println!("Scanning directory <{}>...", abs_path.unwrap().display());
-    let dirs = scan_directories(&dir);
-    println!("Computing hashes...");
-    let computed_files = process_files_in_parallel(dirs);
-    //for (path, fdata) in computed_files {
-    //    println!("{} -> {:#?}", path.display(), fdata);
-    //}
-    println!("Looking for duplicates...");
-    let duplicates = find_duplicates_parallel(&computed_files);
-    match write_results_to_json(duplicates, &result_file) {
-        Ok(_) => println!("Results written to {}", result_file),
-        Err(e) => eprintln!("Failed to write results: {}", e),
-    }
 }
