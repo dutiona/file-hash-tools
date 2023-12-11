@@ -1,19 +1,15 @@
-use std::collections::HashMap;
-use std::env;
-use std::fs;
-use std::fs::File;
-use std::io::Write;
-use std::os::unix::fs::MetadataExt;
-use std::path::{Component, PathBuf};
-use std::sync::mpsc::channel;
-use std::time::SystemTime;
+use std::{
+    env, fs,
+    os::unix::fs::MetadataExt,
+    path::{Component, PathBuf},
+    sync::mpsc::channel,
+    time::SystemTime,
+};
 
 use dashmap::DashMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use num_cpus;
-use rayon::prelude::*;
 use serde::Serialize;
-use serde_json;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
@@ -28,7 +24,7 @@ pub enum FileCategory {
 #[derive(Debug, Clone, Serialize)]
 pub struct FileData {
     path: PathBuf,
-    hash: String,
+    pub hash: String,
     access_time: Option<SystemTime>,
     creation_time: Option<SystemTime>,
     modification_time: Option<SystemTime>,
@@ -200,16 +196,31 @@ fn normalize_path(path: &PathBuf) -> PathBuf {
     normalized_path
 }
 
-pub fn to_absolute_path(relative_path: &PathBuf) -> std::io::Result<PathBuf> {
+pub fn to_absolute_path(
+    relative_path: &PathBuf,
+    remove_prefix: &Option<PathBuf>,
+) -> std::io::Result<PathBuf> {
     let current_dir = env::current_dir()?;
-    Ok(normalize_path(&current_dir.join(relative_path)))
+    let abs_dir = normalize_path(&current_dir.join(relative_path));
+    match remove_prefix {
+        None => Ok(abs_dir),
+        Some(path_prefix) => Ok(abs_dir
+            .strip_prefix(path_prefix)
+            .map(|p| p.to_path_buf()) // prefix found
+            .map_err(|_| abs_dir)
+            .unwrap()), // no prefix found, we ignore and return
+    }
 }
 
-fn get_file_info(path: &PathBuf, hash: &str) -> std::io::Result<FileData> {
+fn get_file_info(
+    path: &PathBuf,
+    hash: &str,
+    remove_prefix: &Option<PathBuf>,
+) -> std::io::Result<FileData> {
     let metadata = fs::metadata(path)?;
 
     Ok(FileData {
-        path: to_absolute_path(path).unwrap(),
+        path: to_absolute_path(path, &remove_prefix).unwrap(),
         hash: hash.to_owned(),
         access_time: metadata.accessed().ok(),
         creation_time: metadata.created().ok(),
@@ -229,7 +240,10 @@ pub fn scan_directories(start_path: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-pub fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileData> {
+pub fn process_files_in_parallel(
+    paths: Vec<PathBuf>,
+    remove_prefix: &Option<PathBuf>,
+) -> DashMap<PathBuf, FileData> {
     let num_cores = num_cpus::get();
     let pool = ThreadPool::new(num_cores); // Number of threads
     let (tx, rx) = channel();
@@ -246,10 +260,11 @@ pub fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileDa
 
     for path in paths {
         let tx = tx.clone();
+        let prefix = remove_prefix.clone();
         pool.execute(move || {
             let hash =
                 hash_tools::compute_hash_file(&path, hash_tools::SupportedHashes::SHA256).unwrap();
-            let file_data = get_file_info(&path, &hash).unwrap();
+            let file_data = get_file_info(&path, &hash, &prefix).unwrap();
             tx.send(file_data).unwrap();
         });
     }
@@ -266,56 +281,4 @@ pub fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileDa
     }
 
     results
-}
-
-pub fn find_duplicates_parallel(
-    results: &DashMap<PathBuf, FileData>,
-) -> DashMap<String, Vec<FileData>> {
-    let hash_groups = DashMap::new();
-
-    let progress_bar = ProgressBar::new((results.len() * 2) as u64);
-    progress_bar.set_style(
-        ProgressStyle::default_bar()
-            .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-            )
-            .unwrap()
-            .progress_chars("#>-"),
-    );
-
-    results.par_iter().for_each(|entry| {
-        let file_data = entry.value();
-        hash_groups
-            .entry(file_data.hash.clone())
-            .or_insert_with(|| Vec::new())
-            .push(file_data.clone());
-
-        progress_bar.inc(1); // Update progress
-    });
-
-    let filtered_hash_groups = DashMap::new();
-
-    hash_groups.par_iter().for_each(|entry| {
-        if entry.value().len() > 1 {
-            filtered_hash_groups.insert(entry.key().clone(), entry.value().clone());
-        }
-
-        progress_bar.inc(1); // Update progress
-    });
-
-    filtered_hash_groups
-}
-
-pub fn write_results_to_json(
-    duplicates: DashMap<String, Vec<FileData>>,
-    output_file: &str,
-) -> std::io::Result<()> {
-    // Convert DashMap to a standard HashMap for serialization
-    let duplicates_hashmap: HashMap<_, _> = duplicates.into_iter().collect();
-
-    let json = serde_json::to_string_pretty(&duplicates_hashmap)?;
-    let mut file = File::create(output_file)?;
-    file.write_all(json.as_bytes())?;
-
-    Ok(())
 }
