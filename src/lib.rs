@@ -204,11 +204,10 @@ pub fn to_absolute_path(
     let abs_dir = normalize_path(&current_dir.join(relative_path));
     match remove_prefix {
         None => Ok(abs_dir),
-        Some(path_prefix) => Ok(abs_dir
-            .strip_prefix(path_prefix)
-            .map(|p| p.to_path_buf()) // prefix found
-            .map_err(|_| abs_dir)
-            .unwrap()), // no prefix found, we ignore and return
+        Some(path_prefix) => match abs_dir.strip_prefix(path_prefix) {
+            Ok(p) => Ok(p.to_path_buf()), // prefix found & stripped
+            Err(_) => Ok(abs_dir),        // prefix not found, we ignore
+        },
     }
 }
 

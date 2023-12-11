@@ -19,13 +19,13 @@ struct Args {
 }
 
 fn write_results_to_json(
-    duplicates: DashMap<PathBuf, FileData>,
+    hashes: &DashMap<PathBuf, FileData>,
     output_file: &str,
 ) -> std::io::Result<()> {
     // Convert DashMap to a standard HashMap for serialization
-    let duplicates_hashmap: HashMap<_, _> = duplicates.into_iter().collect();
+    let hashes_hashmap: HashMap<_, _> = hashes.clone().into_iter().collect();
 
-    let json = serde_json::to_string_pretty(&duplicates_hashmap)?;
+    let json = serde_json::to_string_pretty(&hashes_hashmap)?;
     let mut file = File::create(output_file)?;
     file.write_all(json.as_bytes())?;
 
@@ -50,7 +50,7 @@ fn main() {
     println!("Computing hashes...");
     let computed_files = process_files_in_parallel(dirs, &None);
 
-    match write_results_to_json(computed_files, &result_file) {
+    match write_results_to_json(&computed_files, &result_file) {
         Ok(_) => println!("Results written to {}", result_file),
         Err(e) => eprintln!("Failed to write results: {}", e),
     }

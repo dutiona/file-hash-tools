@@ -60,11 +60,11 @@ fn find_duplicates_parallel(
 }
 
 fn write_results_to_json(
-    duplicates: DashMap<String, Vec<FileData>>,
+    duplicates: &DashMap<String, Vec<FileData>>,
     output_file: &str,
 ) -> std::io::Result<()> {
     // Convert DashMap to a standard HashMap for serialization
-    let duplicates_hashmap: HashMap<_, _> = duplicates.into_iter().collect();
+    let duplicates_hashmap: HashMap<_, _> = duplicates.clone().into_iter().collect();
 
     let json = serde_json::to_string_pretty(&duplicates_hashmap)?;
     let mut file = File::create(output_file)?;
@@ -94,7 +94,7 @@ fn main() {
     println!("Looking for duplicates...");
     let duplicates = find_duplicates_parallel(&computed_files);
 
-    match write_results_to_json(duplicates, &result_file) {
+    match write_results_to_json(&duplicates, &result_file) {
         Ok(_) => println!("Results written to {}", result_file),
         Err(e) => eprintln!("Failed to write results: {}", e),
     }
