@@ -2,22 +2,18 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::fs::File;
-use std::io::{self, Error, ErrorKind, Read, Write};
+use std::io::Write;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Component, PathBuf};
 use std::sync::mpsc::channel;
 use std::time::SystemTime;
 
 use dashmap::DashMap;
-use hex;
 use indicatif::{ProgressBar, ProgressStyle};
 use num_cpus;
-use openssl::hash::MessageDigest;
 use rayon::prelude::*;
-use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY, SHA256, SHA384, SHA512, SHA512_256};
 use serde::Serialize;
 use serde_json;
-use sha2::{Digest, Sha224, Sha512_224};
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
 
@@ -42,12 +38,16 @@ pub struct FileData {
 }
 
 pub mod hash_tools {
-    use sha2::Sha512_256;
-
-    use super::*;
+    use hex;
+    use openssl::hash::MessageDigest;
+    use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY, SHA256, SHA384, SHA512, SHA512_256};
+    use sha2::{Digest, Sha224, Sha512_224};
+    use std::fs::File;
+    use std::io::{self, Error, ErrorKind, Read};
+    use std::path::PathBuf;
 
     #[derive(PartialEq, Eq)]
-    enum SupportedHashes {
+    pub enum SupportedHashes {
         CRC32,      // crc32fast
         MD5,        // openssl
         SHA1,       // ring
@@ -148,9 +148,25 @@ pub mod hash_tools {
             return Err(Error::new(ErrorKind::Unsupported, "Unsupported hash type."));
         }
     }
-}
 
-//fn calculate_hash(file_path: &PathBuf) -> io::Result<String> {}
+    pub fn compute_hash_file(
+        file_path: &PathBuf,
+        hash_type: SupportedHashes,
+    ) -> io::Result<String> {
+        match hash_type {
+            SupportedHashes::CRC32 => compute_crc32_hash(file_path),
+            SupportedHashes::MD5 => compute_md5_hash(file_path),
+            SupportedHashes::SHA1 => compute_sha_ring_hash(file_path, &SHA1_FOR_LEGACY_USE_ONLY),
+            SupportedHashes::SHA256 => compute_sha_ring_hash(file_path, &SHA256),
+            SupportedHashes::SHA384 => compute_sha_ring_hash(file_path, &SHA384),
+            SupportedHashes::SHA512 => compute_sha_ring_hash(file_path, &SHA512),
+            SupportedHashes::SHA512_256 => compute_sha_ring_hash(file_path, &SHA512_256),
+            SupportedHashes::SHA224 | SupportedHashes::SHA512_224 => {
+                compute_sha_sha2_hash(file_path, hash_type)
+            }
+        }
+    }
+}
 
 fn get_file_category(metadata: &fs::Metadata) -> FileCategory {
     if metadata.is_dir() {
@@ -231,7 +247,8 @@ pub fn process_files_in_parallel(paths: Vec<PathBuf>) -> DashMap<PathBuf, FileDa
     for path in paths {
         let tx = tx.clone();
         pool.execute(move || {
-            let hash = ""; //calculate_hash(&path).unwrap();
+            let hash =
+                hash_tools::compute_hash_file(&path, hash_tools::SupportedHashes::SHA256).unwrap();
             let file_data = get_file_info(&path, &hash).unwrap();
             tx.send(file_data).unwrap();
         });
