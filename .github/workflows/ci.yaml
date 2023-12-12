@@ -7,19 +7,17 @@ on:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  build-and-test-unix:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
         rust: [nightly, beta, stable, 1.75.0, 1.74.0, 1.73.0, 1.72.1, 1.71.1]
         include:
           - os: ubuntu-latest
             distro: ubuntu
           - os: macos-latest
             distro: macos
-          - os: windows-latest
-            distro: windows
 
     runs-on: ${{ matrix.os }}
     
@@ -32,6 +30,43 @@ jobs:
         toolchain: ${{ matrix.rust }}
         profile: minimal
         override: true
+
+    - name: Check (Debug)
+      run: cargo check
+
+    - name: Test (Debug)
+      run: cargo test
+
+    - name: Check (Release)
+      run: cargo check --release
+
+    - name: Test (Release)
+      run: cargo test --release
+
+  build-and-test-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+        rust: [nightly, beta, stable, 1.75.0, 1.74.0, 1.73.0, 1.72.1, 1.71.1]
+        include:
+          - os: windows-latest
+            distro: windows
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        profile: minimal
+        override: true
+    - run: echo "version=$(rustc --version)" >> $GITHUB_OUTPUT
+      id: rust-version
+    - run: echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Append
+    - run: vcpkg install openssl:x64-windows-static-md
 
     - name: Check (Debug)
       run: cargo check
