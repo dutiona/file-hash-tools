@@ -1,6 +1,5 @@
 use std::{
     env, fs,
-    os::unix::fs::MetadataExt,
     path::{Component, PathBuf},
     sync::mpsc::channel,
     time::SystemTime,
@@ -28,7 +27,6 @@ pub struct FileData {
     access_time: Option<SystemTime>,
     creation_time: Option<SystemTime>,
     modification_time: Option<SystemTime>,
-    owner: Option<u32>,
     file_type: FileCategory,
     size: u64,
 }
@@ -224,7 +222,6 @@ fn get_file_info(
         access_time: metadata.accessed().ok(),
         creation_time: metadata.created().ok(),
         modification_time: metadata.modified().ok(),
-        owner: Some(metadata.uid()),
         file_type: get_file_category(&metadata),
         size: metadata.len(),
     })
