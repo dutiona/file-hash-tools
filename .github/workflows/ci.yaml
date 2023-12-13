@@ -27,10 +27,10 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-        components: rustfmt, clippy
+        components: rustfmt, rust-src, clippy
 
     - name: Install Cargo modules
-      run: cargo install cargo-audit cargo-llvm-cov
+      run: cargo install cargo-audit cargo-llvm-cov cargo-outdated cargo-benchcmp cargo-cache
 
     - name: Build (Debug)
       run: cargo build --all-targets --all-features --verbose
@@ -42,16 +42,19 @@ jobs:
       run: cargo test --verbose
 
     - name: Check (Debug)
-      run: cargo check --verbose
+      run: cargo check --all-features --verbose
 
     - name: Clippy (Debug)
       run: cargo clippy --verbose
+
+    - name: Outdated (Debug)
+      run: cargo outdated --workspace
 
     - name: Audit (Debug)
       run: cargo audit
 
     - name: Check (Debug)
-      run: cargo llvm-cov --html --verbose
+      run: cargo llvm-cov --all-features --workspace --html --verbose
 
     - name: Doc
       run: cargo doc
@@ -98,10 +101,10 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-        components: rustfmt, clippy
+        components: rustfmt, rust-src, clippy
 
     - name: Install Cargo modules
-      run: cargo install cargo-audit cargo-llvm-cov
+      run: cargo install cargo-audit cargo-llvm-cov cargo-outdated cargo-benchcmp cargo-cache
 
     - run: echo "version=$(rustc --version)" >> $GITHUB_OUTPUT
       id: rust-version
@@ -118,7 +121,7 @@ jobs:
       run: cargo test --verbose
 
     - name: Check (Debug)
-      run: cargo check --verbose
+      run: cargo check --all-features --verbose
 
     - name: Clippy (Debug)
       run: cargo clippy --verbose
@@ -127,7 +130,7 @@ jobs:
       run: cargo audit
 
     - name: Check (Debug)
-      run: cargo llvm-cov --html --all-features --workspace --verbose
+      run: cargo llvm-cov --all-features --workspace --html --verbose
 
     - name: Doc
       run: cargo doc
