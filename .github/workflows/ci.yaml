@@ -21,7 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
@@ -74,7 +74,7 @@ jobs:
         tar -czvf ${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz ./artifacts
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.os }}-${{ matrix.rust }}-artifacts
         path: ${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz
@@ -92,7 +92,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
@@ -153,7 +153,7 @@ jobs:
         Compress-Archive -Path artifacts/* -DestinationPath $tarballName -Force
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.os }}-${{ matrix.rust }}-artifacts
         path: ${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz
