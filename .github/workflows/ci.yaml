@@ -4,7 +4,6 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
 
 jobs:
   build-and-test-unix:
@@ -49,7 +48,7 @@ jobs:
       run: cargo clippy --verbose
 
     - name: Audit (Debug)
-      run: cargo audit --verbose
+      run: cargo audit
 
     - name: Check (Debug)
       run: cargo llvm-cov --html --verbose
@@ -125,7 +124,7 @@ jobs:
       run: cargo clippy --verbose
 
     - name: Audit (Debug)
-      run: cargo audit --verbose
+      run: cargo audit
 
     - name: Check (Debug)
       run: cargo llvm-cov --html --all-features --workspace --verbose
