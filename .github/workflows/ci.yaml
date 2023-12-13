@@ -68,9 +68,9 @@ jobs:
     - name: Package Artifacts
       run: |
         mkdir -p artifacts/benches artifacts/coverage
-        cp target/criterion/* artifacts/benches/
-        cp target/doc artifacts/doc
-        cp target/llvm-cov/* artifacts/coverage/
+        cp -r target/criterion/* artifacts/benches/
+        cp -r target/doc artifacts/doc
+        cp -r target/llvm-cov/* artifacts/coverage/
         tar -czvf ${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz ./artifacts
 
     - name: Upload Artifact
@@ -141,9 +141,9 @@ jobs:
     - name: Package Artifacts
       run: |
         mkdir -p artifacts/benches artifacts/coverage
-        cp target/criterion/* artifacts/benches/
-        cp target/doc artifacts/doc
-        cp target/llvm-cov/* artifacts/coverage/
+        cp -r target/criterion/* artifacts/benches/
+        cp -r target/doc artifacts/doc
+        cp -r target/llvm-cov/* artifacts/coverage/
         tar -czvf ${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz ./artifacts
 
     - name: Upload Artifact
