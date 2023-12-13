@@ -28,7 +28,10 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-        components: rustfmt, clippy, cargo-audit, cargo-llvm-cov
+        components: rustfmt, clippy
+
+    - name: Install Cargo modules
+      run: cargo install cargo-audit cargo-llvm-cov
 
     - name: Build (Debug)
       run: cargo build --all-target --all-features --verbose
@@ -96,7 +99,10 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust }}
-        components: rustfmt, clippy, cargo-audit, cargo-llvm-cov
+        components: rustfmt, clippy
+
+    - name: Install Cargo modules
+      run: cargo install cargo-audit cargo-llvm-cov
 
     - run: echo "version=$(rustc --version)" >> $GITHUB_OUTPUT
       id: rust-version
