@@ -67,9 +67,9 @@ jobs:
 
     - name: Package Artifacts
       run: |
-        mkdir -p artifacts/benches artifacts/coverage
+        mkdir -p artifacts/benches artifacts/doc artifacts/coverage
         cp -r target/criterion/* artifacts/benches/
-        cp -r target/doc artifacts/doc
+        cp -r target/doc/* artifacts/doc/
         cp -r target/llvm-cov/* artifacts/coverage/
         tar -czvf ${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz ./artifacts
 
@@ -140,11 +140,14 @@ jobs:
 
     - name: Package Artifacts
       run: |
-        mkdir -p artifacts/benches artifacts/coverage
-        cp -r target/criterion/* artifacts/benches/
-        cp -r target/doc artifacts/doc
-        cp -r target/llvm-cov/* artifacts/coverage/
-        tar -czvf ${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz ./artifacts
+        New-Item -ItemType Directory -Force -Path artifacts/benches
+        Copy-Item -Recurse -Force target/criterion/* artifacts/benches/
+        New-Item -ItemType Directory -Force -Path artifacts/doc
+        Copy-Item -Recurse -Force target/doc/* artifacts/doc/
+        New-Item -ItemType Directory -Force -Path artifacts/coverage
+        Copy-Item -Recurse -Force target/llvm-cov/* artifacts/coverage/
+        $tarballName = "${{ matrix.os }}-${{ matrix.rust }}-artifacts.tar.gz"
+        Compress-Archive -Path artifacts/* -DestinationPath $tarballName -Force
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v2
