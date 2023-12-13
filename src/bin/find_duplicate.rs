@@ -6,7 +6,6 @@ use clap::Parser;
 use dashmap::DashMap;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
-use serde_json;
 
 /// Duplicate File Finder
 #[derive(Parser, Debug)]
@@ -40,7 +39,7 @@ fn find_duplicates_parallel(
         let file_data = entry.value();
         hash_groups
             .entry(file_data.hash.clone())
-            .or_insert_with(|| Vec::new())
+            .or_insert_with(Vec::new)
             .push(file_data.clone());
 
         progress_bar.inc(1); // Update progress

@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -12,7 +12,6 @@ use clap::Parser;
 use dashmap::DashMap;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 /// Duplicate File Finder
 #[derive(Parser, Debug)]
@@ -62,9 +61,9 @@ fn write_results_to_json(results: &DiffResults, output_file: &str) -> std::io::R
 }
 
 fn check_integrity(
-    left_dir: &PathBuf,
+    left_dir: &Path,
     left_files: &DashMap<PathBuf, FileData>,
-    right_dir: &PathBuf,
+    right_dir: &Path,
     right_files: &DashMap<PathBuf, FileData>,
 ) -> DiffResults {
     let mismatched_files = Arc::new(Mutex::new(Vec::new()));
@@ -101,11 +100,12 @@ fn check_integrity(
     });
 
     let ret = DiffResults {
-        left_dir: left_dir.clone(),
-        right_dir: right_dir.clone(),
+        left_dir: left_dir.to_path_buf(),
+        right_dir: right_dir.to_path_buf(),
         mismatched_files: mismatched_files.lock().unwrap().to_vec(),
         missing_files: missing_files.lock().unwrap().to_vec(),
     };
+
     ret
 }
 
@@ -144,8 +144,7 @@ fn main() {
     let left_dirs = scan_directories(&left_dir);
 
     println!("Computing hashes...");
-    let left_computed_files =
-        process_files_in_parallel(left_dirs, &Some(left_abs_path.clone().into()));
+    let left_computed_files = process_files_in_parallel(left_dirs, &Some(left_abs_path.clone()));
 
     let _ = write_results_to_json2(&left_computed_files, format!("left_{result_file}").as_str());
 
@@ -154,8 +153,7 @@ fn main() {
     let right_dirs = scan_directories(&right_dir);
 
     println!("Computing hashes...");
-    let right_computed_files =
-        process_files_in_parallel(right_dirs, &Some(right_abs_path.clone().into()));
+    let right_computed_files = process_files_in_parallel(right_dirs, &Some(right_abs_path.clone()));
 
     let _ = write_results_to_json2(
         &right_computed_files,

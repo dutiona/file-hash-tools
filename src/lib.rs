@@ -1,13 +1,12 @@
 use std::{
     env, fs,
-    path::{Component, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::mpsc::channel,
     time::SystemTime,
 };
 
 use dashmap::DashMap;
 use indicatif::{ProgressBar, ProgressStyle};
-use num_cpus;
 use serde::Serialize;
 use threadpool::ThreadPool;
 use walkdir::WalkDir;
@@ -38,7 +37,7 @@ pub mod hash_tools {
     use sha2::{Digest, Sha224, Sha512_224};
     use std::fs::File;
     use std::io::{self, Error, ErrorKind, Read};
-    use std::path::PathBuf;
+    use std::path::Path;
 
     #[derive(PartialEq, Eq)]
     pub enum SupportedHashes {
@@ -53,7 +52,7 @@ pub mod hash_tools {
         SHA512_256, // ring
     }
 
-    fn compute_crc32_hash(file_path: &PathBuf) -> io::Result<String> {
+    fn compute_crc32_hash(file_path: &Path) -> io::Result<String> {
         let mut file = File::open(file_path)?;
         let mut hasher = crc32fast::Hasher::new();
         let mut buffer = [0; 1024]; // Adjust the buffer size if needed
@@ -63,14 +62,14 @@ pub mod hash_tools {
             if count == 0 {
                 break;
             }
-            hasher.update(&mut buffer);
+            hasher.update(&buffer);
         }
 
         let digest = hasher.finalize().to_ne_bytes();
         Ok(hex::encode(digest))
     }
 
-    fn compute_md5_hash(file_path: &PathBuf) -> io::Result<String> {
+    fn compute_md5_hash(file_path: &Path) -> io::Result<String> {
         let mut file = File::open(file_path)?;
         let mut hasher = openssl::hash::Hasher::new(MessageDigest::md5()).unwrap();
         let mut buffer = [0; 1024]; // Adjust the buffer size if needed
@@ -80,7 +79,7 @@ pub mod hash_tools {
             if count == 0 {
                 break;
             }
-            let _ = hasher.update(&mut buffer);
+            let _ = hasher.update(&buffer);
         }
 
         let digest = hasher.finish().unwrap().to_vec();
@@ -88,11 +87,11 @@ pub mod hash_tools {
     }
 
     fn compute_sha_ring_hash(
-        file_path: &PathBuf,
+        file_path: &Path,
         hash_type: &'static ring::digest::Algorithm,
     ) -> io::Result<String> {
         let mut file = File::open(file_path)?;
-        let mut hasher = Context::new(&hash_type);
+        let mut hasher = Context::new(hash_type);
         let mut buffer = [0; 1024]; // Adjust the buffer size if needed
 
         loop {
@@ -107,10 +106,7 @@ pub mod hash_tools {
         Ok(hex::encode(digest.as_ref()))
     }
 
-    fn compute_sha_sha2_hash(
-        file_path: &PathBuf,
-        hash_type: SupportedHashes,
-    ) -> io::Result<String> {
+    fn compute_sha_sha2_hash(file_path: &Path, hash_type: SupportedHashes) -> io::Result<String> {
         let mut file = File::open(file_path)?;
         let mut buffer = [0; 1024]; // Adjust the buffer size if needed
 
@@ -125,7 +121,8 @@ pub mod hash_tools {
             }
 
             let digest = hasher.finalize();
-            return Ok(hex::encode(digest));
+
+            Ok(hex::encode(digest))
         } else if hash_type == SupportedHashes::SHA512_224 {
             let mut hasher = Sha512_224::new();
             loop {
@@ -137,16 +134,14 @@ pub mod hash_tools {
             }
 
             let digest = hasher.finalize();
-            return Ok(hex::encode(digest));
+
+            Ok(hex::encode(digest))
         } else {
-            return Err(Error::new(ErrorKind::Unsupported, "Unsupported hash type."));
+            Err(Error::new(ErrorKind::Unsupported, "Unsupported hash type."))
         }
     }
 
-    pub fn compute_hash_file(
-        file_path: &PathBuf,
-        hash_type: SupportedHashes,
-    ) -> io::Result<String> {
+    pub fn compute_hash_file(file_path: &Path, hash_type: SupportedHashes) -> io::Result<String> {
         match hash_type {
             SupportedHashes::CRC32 => compute_crc32_hash(file_path),
             SupportedHashes::MD5 => compute_md5_hash(file_path),
@@ -164,21 +159,17 @@ pub mod hash_tools {
 
 fn get_file_category(metadata: &fs::Metadata) -> FileCategory {
     if metadata.is_dir() {
-        return FileCategory::Directory;
+        FileCategory::Directory
+    } else if metadata.is_file() {
+        FileCategory::File
+    } else if metadata.is_symlink() {
+        FileCategory::Symlink
+    } else {
+        FileCategory::Other
     }
-
-    if metadata.is_file() {
-        return FileCategory::File;
-    }
-
-    if metadata.is_symlink() {
-        return FileCategory::Symlink;
-    }
-
-    FileCategory::Other
 }
 
-fn normalize_path(path: &PathBuf) -> PathBuf {
+fn normalize_path(path: &Path) -> PathBuf {
     let mut normalized_path = PathBuf::new();
 
     for component in path.components() {
@@ -195,7 +186,7 @@ fn normalize_path(path: &PathBuf) -> PathBuf {
 }
 
 pub fn to_absolute_path(
-    relative_path: &PathBuf,
+    relative_path: &Path,
     remove_prefix: &Option<PathBuf>,
 ) -> std::io::Result<PathBuf> {
     let current_dir = env::current_dir()?;
@@ -210,14 +201,14 @@ pub fn to_absolute_path(
 }
 
 fn get_file_info(
-    path: &PathBuf,
+    path: &Path,
     hash: &str,
     remove_prefix: &Option<PathBuf>,
 ) -> std::io::Result<FileData> {
     let metadata = fs::metadata(path)?;
 
     Ok(FileData {
-        path: to_absolute_path(path, &remove_prefix).unwrap(),
+        path: to_absolute_path(path, remove_prefix).unwrap(),
         hash: hash.to_owned(),
         access_time: metadata.accessed().ok(),
         creation_time: metadata.created().ok(),
