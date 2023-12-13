@@ -63,7 +63,7 @@ jobs:
       run: cargo test --release
 
     - name: Benchmarks (Release)
-      run: cargo bench
+      run: cargo bench --all-features
 
     - name: Package Artifacts
       run: |
@@ -137,6 +137,9 @@ jobs:
 
     - name: Test (Release)
       run: cargo test --release
+
+    - name: Benchmarks (Release)
+      run: cargo bench --all-features
 
     - name: Package Artifacts
       run: |
