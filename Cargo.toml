@@ -29,7 +29,7 @@ hex = "0.4.3"
 indicatif = "0.17.7"
 md5 = "0.7.0"
 num_cpus = "1.16.0"
-openssl = "0.10.59"
+openssl = "0.10.60"
 rayon = "1.8.0"
 ring = "0.17.5"
 serde = { version = "1.0.193", features = ["derive"] }
