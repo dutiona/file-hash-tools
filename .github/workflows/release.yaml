@@ -34,16 +34,16 @@ jobs:
     - name: Package binaries
       run: |
         mkdir -p package/bin
-        cp target/${{ matrix.target }}/release/bin1 package/bin/
-        cp target/${{ matrix.target }}/release/bin2 package/bin/
-        cp target/${{ matrix.target }}/release/bin3 package/bin/
+        cp target/${{ matrix.target }}/release/check-integrity package/bin/
+        cp target/${{ matrix.target }}/release/find-duplicate package/bin/
+        cp target/${{ matrix.target }}/release/hash-computer package/bin/
         cp README.md package/
         cp LICENSE package/
         cd package
         tar -czvf ../${{ matrix.archive_prefix }}-release.tar.gz .
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.archive_prefix }}-release
         path: ${{ matrix.archive_prefix }}-release.tar.gz
@@ -53,12 +53,12 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v3
       with:
-        path: artifacts
+        path: *-release
 
     - name: Create Release
       id: create_release
@@ -67,6 +67,6 @@ jobs:
         draft: false
         prerelease: false
         files: |
-          artifacts/*.tar.gz
+          *-release/*.tar.gz
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
