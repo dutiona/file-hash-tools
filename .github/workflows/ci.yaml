@@ -34,7 +34,7 @@ jobs:
       run: cargo install cargo-audit cargo-llvm-cov
 
     - name: Build (Debug)
-      run: cargo build --all-target --all-features --verbose
+      run: cargo build --all-targets --all-features --verbose
 
     - name: Format (Debug)
       run: cargo fmt --check --verbose
@@ -110,7 +110,7 @@ jobs:
     - run: vcpkg install openssl:x64-windows-static-md
 
     - name: Build (Debug)
-      run: cargo build --all-target --all-features --verbose
+      run: cargo build --all-targets --all-features --verbose
 
     - name: Format (Debug)
       run: cargo fmt --check --verbose
