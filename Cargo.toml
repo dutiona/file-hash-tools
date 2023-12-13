@@ -2,6 +2,11 @@
 name = "file-hash-tools"
 version = "0.1.0"
 edition = "2021"
+description = "File tools based on hashes to compute hashes in directory tree, find duplicated files and compare 2 folders."
+readme = "README.md"
+documentation = "https://docs.rs/file-hash-tools"
+license = "MIT"
+repository = "https://github.com/dutiona/file-hash-tools"
 
 [package.metadata]
 author = "Michaël Roynard <michaelroynard@gmail.com>"
